@@ -1,0 +1,5 @@
+*/target/*
+*/.idea/*
+*/project/*
+build.properties
+plugins.sbt
