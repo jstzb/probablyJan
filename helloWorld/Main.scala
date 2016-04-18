@@ -2,7 +2,7 @@ import com.cra.figaro.language.{Flip, Select}
 import com.cra.figaro.library.compound.If
 import com.cra.figaro.algorithm.factored.VariableElimination
 
-object Main extends App {
+object Main {
   val morning = Flip(0.4)
   val greeting = If(morning,
     Select(0.1 -> "Good Morning!",0.9 -> "Hello World! Where is my coffee?"),
@@ -13,5 +13,7 @@ object Main extends App {
     println("Your greeting will be \"Hello World! Where is my coffee?\" " +
     "with probability " + result + ".")
   }
-  predict()
+  def main(args: Array[String]){
+  	predict()
+  }
 }
