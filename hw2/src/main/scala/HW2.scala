@@ -1,6 +1,8 @@
 import com.cra.figaro.library.atomic.discrete
-import com.cra.figaro.language.{Chain, Flip}
-import com.cra.figaro.library.compound
+import com.cra.figaro.language.Chain
+import com.cra.figaro.library.compound.{RichCPD, OneOf, ×}
+import com.cra.figaro.language.{Flip, Constant, Apply}
+import com.cra.figaro.algorithm.factored.VariableElimination
 /**
   * Created by jan on 10.05.16.
   *
@@ -60,21 +62,7 @@ object HW2 {
     val cards = List(1,2,3,4,5)
     val moodP1= Flip(0.6)
     val moodP2= Flip(0.5)
-    val cardP1=discrete.Uniform(cards: _*)
-    val cardP2=Chain(cardP1,(card:Int) => discrete.Uniform(cards.filter(_ != card): _*))
-    val betP1=Chain(cardP1,moodP1, (card:Int,goodMood:Boolean) =>
-      if (card>3) {
-        if (goodMood==true)
-          Flip(0.9)
-        else Flip(0.7)} else
-        if (goodMood==true) Flip(0.4)
-      else Flip(0.2))
-    val betP2=Chain(cardP2,moodP2, (card:Int,goodMood:Boolean) =>
-      if (card>3) {
-        if (goodMood==true)
-          Flip(0.8)
-        else Flip(0.7)} else
-      if (goodMood==true) Flip(0.3)
-      else Flip(0.2))
+    val cardP1=discrete.Uniform(cards: _ *)
+    val cardP2=Chain(parent = cardP1,(card:Int)=> discrete.Uniform(cards.filter(_!=card): _ *))
   }
 }
