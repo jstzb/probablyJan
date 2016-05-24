@@ -1,4 +1,5 @@
 import com.cra.figaro.algorithm.sampling.Importance
+import com.cra.figaro.language.Apply
 import com.cra.figaro.library.atomic.discrete
 import com.cra.figaro.library.compound.^^
 /**
@@ -103,6 +104,10 @@ object Hw3 {
     for((p1,p2) <- tuples){^^(p1,p2).setConstraint(unique)}
 
     for(i <- 0 to _handsize-2) {cardV(i).observe(i+1)}
+
+    val quadChance = Apply(cardV(0),cardV(1),cardV(2),cardV(3),cardV(4),
+      (c1:Int,c2:Int,c3:Int,c4:Int,c5:Int) => combos("Quad").contains(Set(c1,c2,c3,c4,c5)))
+
     val imp =Importance(10000,cardV(_handsize-1))
     imp.start()
 
@@ -143,14 +148,22 @@ object Hw3 {
 
     println(hline)
 
-    for(i<-0 to _handsize-2) {cardV(i).unobserve()}
+    //for(i<-0 to _handsize-2) {cardV(i).unobserve()}
     cardV(0).observe(1)
     cardV(1).observe(13)
     cardV(2).observe(25)
 
     println("When observing that Ints 1,13,25 have been drawn:")
-
     println("Probability to draw 13 again is: " + imp.probability(cardV(_handsize-1),13))
     println("Probability to win by drawing an Quadruple is: " + imp.probability(cardV(_handsize-1),37))
+
+    println(hline)
+    imp.stop()
+    cardV(1).unobserve()
+    cardV(2).unobserve()
+    val imp1= Importance(10000,quadChance)
+    imp1.start()
+    println("Probability to get a quadruple is " + imp1.probability(quadChance,true))
+
   }
 }
