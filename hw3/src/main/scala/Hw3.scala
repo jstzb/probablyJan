@@ -1,6 +1,6 @@
-import com.cra.figaro.algorithm.factored.VariableElimination
-import com.cra.figaro.language.Chain
+import com.cra.figaro.algorithm.sampling.Importance
 import com.cra.figaro.library.atomic.discrete
+import com.cra.figaro.library.compound.^^
 /**
   * Created by jan on 17.05.16.
   */
@@ -16,16 +16,38 @@ object Hw3 {
   }
   def main(args: Array[String]) {
 
-    /* Input */
-    val _handsize = 5 // runs out of mem at higher handsize
+    /**
+      *  INPUT variables start with _
+      */
+    val _handsize = 5 // runs out of mem at higher handsize than 5
     val _cards = 52
     val _ranks = 12
     val _suits = 4
+
+    /**
+      * Card and Combocollection starts here
+      */
 
     var cards = List.range(1,_cards)
 
     // number of possible hands 52!/45!
     val hands = cards.toSet.subsets(_handsize)
+
+    /* performance issues are hard*/
+
+    /* this loop will run out of memory during compilation
+
+      for(fir <- 1 to csize;
+          sec <- fir+1 to csize;
+          thr <- sec+1 to csize;
+          frt <- thr+1 to csize;
+          fiv <- frt+1 to csize;
+          six <- fiv+1 to csize;
+          sev <- six+1 to csize
+          ) yield {
+        Set(fir,sec,thr,frt,fiv,six,sev)
+      }
+    */
 
     // number of tuples   3*52*50*49*48*47*46
     val pairs = for(
@@ -57,55 +79,78 @@ object Hw3 {
       else {"None"}
     }
 
-
+    // creates Map( Combo -> List[Set[Int]])
     val combos = hands.toList.groupBy(applyCombos(_))
 
+    /**
+      * FIGARO usage starts here:
+      */
 
-    /* performance issues are hard*/
+    // assigns uniform distr to variable into an hand sized array
+    val cardV=Array.fill(_handsize)(discrete.Uniform(cards: _*))
 
-    /* this loop will run out of memory during compilation
-      for(fir <- 1 to csize;
-          sec <- fir to csize;
-          thr <- sec to csize;
-          frt <- thr to csize;
-          fiv <- frt to csize;
-          six <- fiv to csize;
-          sev <- six to csize
-          ) yield {
-        Set(fir,sec,thr,frt,fiv,six,sev)
-      }
-    */
+    // finds all possible combinations of 2 variables in array
+    val tuples = for (
+      i <- 0 to _handsize-2;
+      j <- i+1 to _handsize-1)
+      yield {(cardV(i),cardV(j))}
 
-    val card1 = discrete.Uniform(cards: _ *)
-    cards = cards.filter(_!=card1.value)
-    val card2=Chain(card1,(c:Int)=> discrete.Uniform(cards: _ *))
-    cards = cards.filter(_!=card2.value)
-    val card3 = Chain(card1,(c:Int) => discrete.Uniform(cards: _ *))
-    cards = cards.filter(_!=card3.value)
-    val card4 = Chain(card1,(c:Int) => discrete.Uniform(cards: _ *))
-    cards = cards.filter(_!=card4.value)
-    val card5 = Chain(card1,(c:Int) => discrete.Uniform(cards: _ *))
-    cards = cards.filter(_!=card5.value)
-    val card6 = Chain(card1,(c:Int) => discrete.Uniform(cards: _ *))
-    cards = cards.filter(_!=card6.value)
-    val card7 = Chain(card1,(c:Int) => discrete.Uniform(cards: _ *))
+    // checks if values in a pair differ
+    def unique(pair : (Int,Int)) =
+      if (pair._1 == pair._2) 0.0; else 1.0
+
+    // Constraint declaration of Markov network
+    for((p1,p2) <- tuples){^^(p1,p2).setConstraint(unique)}
+
+    for(i <- 0 to _handsize-2) {cardV(i).observe(i+1)}
+    val imp =Importance(10000,cardV(_handsize-1))
+    imp.start()
+
+
+    /**
+      * OUTPUTS start here
+      */
+
+
+
+
     //println(hands.size.toString)
-    card1.observe(1)
+
     val hline = "###############################"
 
-    /* Output */
+    /*
     println(hline)
     println("Triples are ")
     for(c <- combos("Trip")){println(c.toString())}
+     */
     println(hline)
+
     println("QuadCombos are ")
     for(c <- combos("Quad")){println(c.toString())}
+
     println(hline)
 
     println("There are "  + pairs.size.toString + " possible Pairs")
     println("There are " + triples.size.toString + " possible Triples")
     println("There are " + quadruples.size.toString + " possible Quadruples")
+
     println(hline)
-    // println(VariableElimination.probability(card2,1).toString)
+
+    println("When observing that Ints 1 to 6 have been drawn:")
+
+    println("Probability to draw 1 again is: " + imp.probability(cardV(_handsize-1),1))
+    println("Probability to draw 14 again is: " + imp.probability(cardV(_handsize-1),14))
+
+    println(hline)
+
+    for(i<-0 to _handsize-2) {cardV(i).unobserve()}
+    cardV(0).observe(1)
+    cardV(1).observe(13)
+    cardV(2).observe(25)
+
+    println("When observing that Ints 1,13,25 have been drawn:")
+
+    println("Probability to draw 13 again is: " + imp.probability(cardV(_handsize-1),13))
+    println("Probability to win by drawing an Quadruple is: " + imp.probability(cardV(_handsize-1),37))
   }
 }
