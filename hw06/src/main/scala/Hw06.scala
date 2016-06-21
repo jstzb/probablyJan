@@ -40,19 +40,19 @@ import com.cra.figaro.library.compound.{^^}
 
 object Hw06 {
   var quality:Double=0.7
-  var potentialListener:Double=10000
+  var potentialListener:Int=10000
 
   val initial:Universe = Universe.createNew()
   val newlyBought:Element[Int]=Poisson(quality*potentialListener)("newlyBought",initial)
   val totalBought:Element[Int]=Constant(0)("totalBought",initial)
-  val newlyExposed:Element[Int]=Poisson(quality*potentialListener)("newlyExposed",initial)
+  val newlyExposed:Element[Int]=Poisson(Math.pow(quality,2)*potentialListener)("newlyExposed",initial)
   val totalExposed:Element[Int]=Constant(0)("totalExposed",initial)
 
   def transition(tbought:Int,nbought:Int,texposed:Int,nexposed:Int):(Element[(Int,Int,Int,Int)])= {
     val totalBought:Element[Int] = Constant(tbought+nbought)
-    val newlyBought:Element[Int] = Poisson(quality * nexposed)
+    val newlyBought:Element[Int] = Poisson(quality* potentialListener * nexposed)
     val totalExposed:Element[Int] = Constant(texposed+nexposed)
-    val newlyExposed:Element[Int] = Poisson(potentialListener*quality-texposed+nbought)
+    val newlyExposed:Element[Int] = Poisson(nbought+texposed*(quality-1))
     ^^(totalBought,newlyBought,totalExposed,newlyExposed)
   }
 
@@ -77,59 +77,80 @@ object Hw06 {
      * Handling input
      */
     args match {
-      case Array("a", d1, d2) =>
+      case Array(d1, d2) =>
         println("Running task a ...")
-        println("Setting song quality to " + args(1))
-        println("Setting potential listeners to " + args(2))
-        noEv(args(1).toDouble, args(2).toDouble)
-      case Array("a", d1) =>
-        println("Running task a ...")
-        println("Setting song quality to " + args(1))
-        noEv(args(1).toDouble, potentialListener)
-      case Array("b") =>
+        println("Setting song quality to " + args(0))
+        println("Setting potential listeners to " + args(1))
+        val data = noEv(args(0).toDouble, args(1).toInt)
         println("Running task b ...")
+        println("Observing newlyBought " + data)
+        withEv(quality,potentialListener,data)
+      case Array(d1) =>
+        println("Running task a ...")
+        println("Setting song quality to " + args(0))
+        val data = noEv(args(0).toDouble, potentialListener)
+        println("Running task b ...")
+        println("Observing newlyBought " + data)
+        withEv(quality,potentialListener,data)
       case _ =>
         println("No input or input not recognized.")
         println("You may chose song quality as a double in [0,1]")
         println("and potential listeners as a int >0.")
         println("by typing 'run quality potentialListener'")
+        println("######################")
         println("Running task a ...")
-        noEv(quality, potentialListener)
+        println("######################")
+        val data = noEv(quality, potentialListener)
+        println("######################")
+        println("Running task b ...")
+        println("######################")
+        println("Observing newlyBought " + data)
+        withEv(quality,potentialListener,data)
     }
     /*
      * Task a) Running without evidence
      */
-    def noEv(quality: Double, potentialListener: Double) = {
+    def noEv(quality: Double, potentialListener: Int) : List[Double] = {
       println("Starting ParticleFilter")
       println("song quality is " + quality)
       println("potential listeners are " + potentialListener)
+      var time = 0
       val alg = ParticleFilter(initial, nextUniverse, 10000)
       alg.start()
-      while (alg.currentUniverse.get[Int]("newlyBought").generateValue() > 100) {
+      var observations:List[Double]=List(alg.currentExpectation("newlyBought",(i:Int) => i))
+      while (observations.head > 10) {
+        time+=1
         println("######################")
-        println("newlyBought" + alg.currentUniverse.get[Int]("newlyBought").generateValue())
-        println("totalBought" + alg.currentUniverse.get[Int]("totalBought").generateValue())
-        println("newlyExposed" + alg.currentUniverse.get[Int]("newlyExposed").generateValue())
-        println("totalExposed" + alg.currentUniverse.get[Int]("totalExposed").generateValue())
+        println("Timestep " + time)
+        println("----------------------")
+        println("newlyBought" + observations.head)
+        println("totalBought" + alg.currentExpectation("totalBought",(i:Int) => i))
+        println("newlyExposed" + alg.currentExpectation("newlyExposed",(i:Int) => i))
+        println("totalExposed" + alg.currentExpectation("totalExposed",(i:Int) => i))
         alg.advanceTime()
+        observations=alg.currentExpectation("newlyBought",(i:Int) => i)::observations
       }
       alg.stop()
+      observations.reverse
     }
     /*
      * Task b) Running with evidence
      */
-    def withEv(quality:Double, potentialListener: Double) = {
+    def withEv(quality:Double, potentialListener: Double, observations:List[Double]) = {
       val alg = ParticleFilter(initial,nextUniverse, 10000)
-      val evidence = NamedEvidence("newlyBought",Observation(120))
       alg.start()
-      while (alg.currentUniverse.get[Int]("newlyBought").generateValue() > 100){
-        println("newlyBought" + alg.currentUniverse.get[Int]("newlyBought").generateValue())
-        println("totalBought" + alg.currentUniverse.get[Int]("totalBought").generateValue())
-        println("newlyExposed" + alg.currentUniverse.get[Int]("newlyExposed").generateValue())
-        println("totalExposed" + alg.currentUniverse.get[Int]("totalExposed").generateValue())
-        alg.advanceTime(Seq(evidence))
+      val evidence = observations.map(x => NamedEvidence("newlyBought",Observation(x)))
+      alg.advanceTime(evidence)
+      for(time <- 1 to observations.length) {
+        println("######################")
+        println("Timestep " + time)
+        println("----------------------")
+        println("totalBought" + + alg.currentExpectation("totalBought",(i:Int) => i))
+        println("newlyBought" + alg.currentExpectation("newlyBought",(i:Int) => i))
+        println("totalExposed" + alg.currentExpectation("totalExposed", (i:Int) => i))
+        println("newlyExposed" + alg.currentExpectation("newlyExposed", (i:Int) => i))
+        alg.advanceTime()
       }
-      alg.stop()
     }
   }
 }
