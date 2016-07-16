@@ -1,3 +1,5 @@
+import java.io.File
+
 import com.cra.figaro.algorithm.factored.VariableElimination
 import com.cra.figaro.algorithm.factored.beliefpropagation.BeliefPropagation
 import com.cra.figaro.algorithm.learning.{EMWithBP, EMWithImportance, EMWithMH, EMWithVE}
@@ -6,7 +8,6 @@ import com.cra.figaro.language.{Element, Flip, Universe}
 import com.cra.figaro.library.atomic.continuous.Beta
 import com.cra.figaro.library.compound.CPD
 import com.cra.figaro.patterns.learning.{ModelParameters, ParameterCollection}
-import prefuse.action.layout.graph.FruchtermanReingoldLayout.Params
 
 import scala.util.Random
 
@@ -14,6 +15,7 @@ import scala.util.Random
   * Created by jan on 14.07.16.
   *
   * Figure : x -> y -> z
+  *
   *
   * Task 3
   * This exercise points out a pitfall with the EM algorithm. Con-
@@ -47,9 +49,11 @@ import scala.util.Random
   * EM to learn the parameters and run your test. This time, the probability that
   * Z is true should be close to 1. Why do you think learning worked in this case?
   * What moral can you derive for your own use of EM ?
-  * Now repeat question 3, using Bayesian learning instead of EM .
+  *
   *
   * Task 4
+  * Now repeat question 3, using Bayesian learning instead of EM .
+  *
   * Try different inference algorithms on this problem. Which algorithm works
   * best? Why do you think that is?
   * Subtask a
@@ -59,6 +63,7 @@ import scala.util.Random
   * Beta(1, 1) priors for all variables or you use Beta(2, 1) and Beta(1, 2) priors
   * for Y? Are the results with the Beta(2, 1) and Beta(1, 2) priors significantly
   * different from EM ? If so, why do you think that is?
+  *
   *
   * Task 5
   * Now that you’ve seen how parameter learning works, it’s time to revisit the
@@ -141,19 +146,36 @@ object HW7 {
       case "im" =>
         val learningAlg = EMWithImportance(trainSize,impParticle,params)
         learningAlg.start()
+        val futureModel = new ModelA(params.posteriorParameters)
+        futureModel.x.observe(true)
+        val result = VariableElimination.probability(futureModel.z,true)
+        learningAlg.kill()
+        result
       case "mh" =>
         val learningAlg = EMWithMH(trainSize,mhParticle,ProposalScheme.default,params)
         learningAlg.start()
+        val futureModel = new ModelA(params.posteriorParameters)
+        futureModel.x.observe(true)
+        val result = VariableElimination.probability(futureModel.z,true)
+        learningAlg.kill()
+        result
       case "bp" =>
         val learningAlg = EMWithBP(trainSize,bpParticle,params)
         learningAlg.start()
+        val futureModel = new ModelA(params.posteriorParameters)
+        futureModel.x.observe(true)
+        val result = VariableElimination.probability(futureModel.z,true)
+        learningAlg.kill()
+        result
       case _ =>
         val learningAlg = EMWithVE(trainSize,params)
         learningAlg.start()
+        val futureModel = new ModelA(params.posteriorParameters)
+        futureModel.x.observe(true)
+        val result = VariableElimination.probability(futureModel.z,true)
+        learningAlg.kill()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+        result
     }
-    val futureModel = new ModelA(params.posteriorParameters)
-    futureModel.x.observe(true)
-    VariableElimination.probability(futureModel.z,true)
   }
 
   def bLearn(algo:String, model:String): Double = {
@@ -204,7 +226,6 @@ object HW7 {
   }
 
   def main(args: Array[String]) {
-    Universe.createNew()
     args match {
       case Array("3",x,y) =>
         printTask("3",x,y)
