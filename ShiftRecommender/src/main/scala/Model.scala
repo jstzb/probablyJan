@@ -5,6 +5,7 @@ import com.cra.figaro.language._
 import com.cra.figaro.library.atomic.continuous.Beta
 import com.cra.figaro.library.atomic.discrete.Uniform
 import com.cra.figaro.library.collection.{Container, FixedSizeArray}
+import com.cra.figaro.patterns.learning.{ModelParameters, ParameterCollection}
 
 
 /**
@@ -30,8 +31,8 @@ object Model {
 
   val maxShifts: Int = 2
 
-  class Worker() {
-    val taskQuality = new FixedSizeArray[Double](numTasks, _ => Beta(1, 1))
+  class Worker(id: Int,parameters:ModelParameters) {
+    val taskQuality = new FixedSizeArray[Double](numTasks, i => Beta(1, 1)("worker"+id+",task" + i,parameters))
     // i d like defaultQuality.clone here
     val timetable = for (i <- 0 until numDays) yield new FixedSizeArray[Boolean](numShifts, (_: Int) => Flip(0.5))
 
@@ -75,8 +76,8 @@ object Model {
     *
     */
 
-  class Week(end: LocalDate) {
-    val workers = Seq.fill(numWorkers)(new Worker())
+  class Week(parameters:ModelParameters,modelUniverse:Universe) {
+    val workers = Seq.tabulate(numWorkers)(i=> new Worker(i,parameters))
     val shifts = Seq.tabulate(numDays, numShifts)((day, shift) => new Shift(workers, day, shift))
 
 
@@ -87,7 +88,9 @@ object Model {
   }
 
   def main(args: Array[String]) {
-    val week = new Week(LocalDate.now())
+    val modelUniverse = new Universe
+    val parameters = ModelParameters()
+    val week = new Week(parameters,modelUniverse)
     week.sumQuality().addCondition(_ > 2.0)
     week.shifts(1)(1).observeWorkerAssign(Seq(0, 1, 2))
     val alg = Importance(10000, week.shifts(1)(1).qualifications.elements: _*)
