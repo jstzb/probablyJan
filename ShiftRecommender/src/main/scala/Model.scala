@@ -6,13 +6,23 @@ import com.cra.figaro.library.atomic.continuous.Beta
 import com.cra.figaro.library.atomic.discrete.Uniform
 import com.cra.figaro.library.collection.{Container, FixedSizeArray}
 
+
 /**
+  *
+  * Model of Shift Recommender
+  *
+  * constraints implemented:
+  * one worker may only work once a shift
+  * one worker may only work if he wants to work
+  *
+  *
+  *
   * Created by jan on 21.07.16.
   */
 object Model {
   val numDays: Int = 2
   val numShifts: Int = 2
-  val numTasks: Int = 4
+  val numTasks: Int = 3
   val numWorkers: Int = 4
 
   val defaultQuality: Element[Double] = Beta(1, 1)
@@ -23,10 +33,10 @@ object Model {
   class Worker() {
     val taskQuality = new FixedSizeArray[Double](numTasks, _ => Beta(1, 1))
     // i d like defaultQuality.clone here
-    val timetable = new FixedSizeArray[Boolean](numDays * numShifts, (_: Int) => Flip(0.5))
+    val timetable = for (i <- 0 until numDays) yield new FixedSizeArray[Boolean](numShifts, (_: Int) => Flip(0.5))
 
-    def hasTime(day: Int, shift: Int): Element[Boolean] = {
-      timetable((day - 1) * numShifts + shift)
+    def hasTime(day: Int, shift: Int): Boolean = {
+      timetable(day)(shift).value
     }
   }
 
@@ -34,24 +44,29 @@ object Model {
     * Shift(workers) represents an assignment of possible workers to tasks
     * Attention: number of possible workers > number of tasks
     */
-  class Shift(workers: Seq[Worker]) {
+  class Shift(workers: Seq[Worker], day: Int, shift: Int) {
     val index = generateIndexWoDup(numTasks)
-    val taskQualifications = new FixedSizeArray[Double](numTasks, i => workers(index(i).value).taskQuality(i))
+    val qualifications = new FixedSizeArray[Double](numTasks, i => workers(index(i).value).taskQuality(i))
 
-    def generateIndexWoDup(num:Int):Seq[Element[Int]] = {
-      for (i <- 0 to num) yield
-        Chain(Uniform(0,numWorkers),chainFunction)
+    def generateIndexWoDup(num: Int): Seq[Element[Int]] = {
+      for (i <- 0 until num) yield
+        Chain(Uniform(0, numWorkers), chainFunction)
     }
 
-    def chainFunction(num:Int): Element[Int] = {
-      val values: Seq[Int] = Seq.range(0,numWorkers-1)
+    def chainFunction(num: Int): Element[Int] = {
+      val values: Seq[Int] = Seq.range(0, numWorkers - 1)
       var duplicates = List[Int]()
 
       duplicates = num :: duplicates
-      Uniform(values.filterNot(duplicates.contains(_)): _*)
+      Uniform(values
+        .filterNot(duplicates.contains(_)) // ensures there are no duplicates
+        .filterNot(workers(_).hasTime(day, shift)) // ensures workers has time
+        : _*)
     }
 
-    def sumQuality(): Element[Double] = taskQualifications.foldLeft(0.0)(_ + _)
+    def sumQuality(): Element[Double] = qualifications.foldLeft(0.0)(_ + _)
+
+    def observeWorkerAssign(is: Seq[Int]): Unit = for (i <- 0 until is.size) index(i).observe(is(i))
   }
 
   /**
@@ -62,18 +77,22 @@ object Model {
 
   class Week(end: LocalDate) {
     val workers = Seq.fill(numWorkers)(new Worker())
-    val shifts = Seq.fill(numShifts*numDays)(new Shift(workers))
+    val shifts = Seq.tabulate(numDays, numShifts)((day, shift) => new Shift(workers, day, shift))
 
 
-    def sumQuality(): Element[Double]= Container(shifts.map(_.sumQuality()): _*).foldLeft(0.0)(_ + _)
+    def sumQuality(): Element[Double] = Container(shifts
+      .flatten // from sequence[][] to sequence[]
+      .map(_.sumQuality()): _*) // create sequence[] of sums
+      .foldLeft(0.0)(_ + _) // create global sum of qualities of a week
   }
 
   def main(args: Array[String]) {
     val week = new Week(LocalDate.now())
     week.sumQuality().addCondition(_ > 2.0)
-    val alg = Importance(10000, week.shifts(0).taskQualifications.elements: _*)
+    week.shifts(1)(1).observeWorkerAssign(Seq(0, 1, 2))
+    val alg = Importance(10000, week.shifts(1)(1).qualifications.elements: _*)
     alg.start()
-    val test = alg.probability(week.shifts(0).taskQualifications(1), (x: Double) => x > 0.1)
+    val test = alg.probability(week.shifts(1)(1).qualifications(1), (x: Double) => x > 0.1)
     println(test)
 
   }
