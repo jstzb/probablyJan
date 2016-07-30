@@ -1,11 +1,14 @@
 import java.time.LocalDate
 
+import com.cra.figaro.algorithm.factored.VariableElimination
 import com.cra.figaro.algorithm.sampling.Importance
 import com.cra.figaro.language._
 import com.cra.figaro.library.atomic.continuous.Beta
 import com.cra.figaro.library.atomic.discrete.Uniform
 import com.cra.figaro.library.collection.{Container, FixedSizeArray}
 import com.cra.figaro.patterns.learning.{ModelParameters, ParameterCollection}
+
+import scala.util.Random
 
 
 /**
@@ -30,14 +33,17 @@ object Model {
   val defaultTime: Element[Boolean] = Flip(0.5)
 
   val maxShifts: Int = 2
+  val trainSize: Int = 5
 
-  class Worker(id: Int,parameters:ModelParameters) {
-    val taskQuality = new FixedSizeArray[Double](numTasks, i => Beta(1, 1)("worker"+id+",task" + i,parameters))
+
+
+  class Worker(id: Int) {
+    val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform(0,100))
     // i d like defaultQuality.clone here
-    val timetable = for (i <- 0 until numDays) yield new FixedSizeArray[Boolean](numShifts, (_: Int) => Flip(0.5))
+    val timetable = for (i <- 0 until numDays) yield for (j <- 0 until numShifts) yield Random.nextBoolean()
 
     def hasTime(day: Int, shift: Int): Boolean = {
-      timetable(day)(shift).value
+      timetable(day)(shift)
     }
   }
 
@@ -46,28 +52,36 @@ object Model {
     * Attention: number of possible workers > number of tasks
     */
   class Shift(workers: Seq[Worker], day: Int, shift: Int) {
-    val index = generateIndexWoDup(numTasks)
-    val qualifications = new FixedSizeArray[Double](numTasks, i => workers(index(i).value).taskQuality(i))
+    var j = 0;
+    // val index = generateIndexWoDup(numTasks)
+    val sumQuality = qualifications.foldLeft(0)(_+_)
+    // new FixedSizeArray[Int](numTasks, i => workers(index(i).value).taskQuality(i))
+    val qualifications = new FixedSizeArray[Int](numTasks, i => workers(i).taskQuality(i))
+    //val qualifications = index.chain(i => chainQual(i))
 
-    def generateIndexWoDup(num: Int): Seq[Element[Int]] = {
-      for (i <- 0 until num) yield
-        Chain(Uniform(0, numWorkers), chainFunction)
-    }
-
-    def chainFunction(num: Int): Element[Int] = {
-      val values: Seq[Int] = Seq.range(0, numWorkers - 1)
+    def generateIndexWoDup(num: Int): FixedSizeArray[Int] = {
       var duplicates = List[Int]()
+      def chainIndex(num: Int): Element[Int] = {
+        val values: Seq[Int] = 0 until numWorkers
 
-      duplicates = num :: duplicates
-      Uniform(values
-        .filterNot(duplicates.contains(_)) // ensures there are no duplicates
-        .filterNot(workers(_).hasTime(day, shift)) // ensures workers has time
-        : _*)
+        duplicates = num :: duplicates
+        Uniform(values
+          .filterNot(duplicates.contains(_)) // ensures there are no duplicates
+          .filterNot(workers(_).hasTime(day, shift)) // ensures workers has time
+          : _*)
+      }
+      new FixedSizeArray[Int](num,(i:Int) => Chain(Uniform(0, numWorkers), chainIndex))
     }
 
-    def sumQuality(): Element[Double] = qualifications.foldLeft(0.0)(_ + _)
 
-    def observeWorkerAssign(is: Seq[Int]): Unit = for (i <- 0 until is.size) index(i).observe(is(i))
+    def chainQual(num:Int):Element[Int] = {
+      val res = workers(num).taskQuality(j)
+      j+=1
+      res
+    }
+
+    def getSumQuality():Element[Int] = qualifications.foldLeft(0)(_ + _)
+
   }
 
   /**
@@ -76,27 +90,33 @@ object Model {
     *
     */
 
-  class Week(parameters:ModelParameters,modelUniverse:Universe) {
-    val workers = Seq.tabulate(numWorkers)(i=> new Worker(i,parameters))
+  class Week() {
+    val workers = Seq.tabulate(numWorkers)(i=> new Worker(i))
     val shifts = Seq.tabulate(numDays, numShifts)((day, shift) => new Shift(workers, day, shift))
 
 
-    def sumQuality(): Element[Double] = Container(shifts
+    /*def sumQuality(): Element[Double] = Container(shifts
       .flatten // from sequence[][] to sequence[]
-      .map(_.sumQuality()): _*) // create sequence[] of sums
-      .foldLeft(0.0)(_ + _) // create global sum of qualities of a week
+      .map(_.sumQuality: _*) // create sequence[] of sums
+      .foldLeft(0.0)(_ + _) // create global sum of qualities of a week*/
   }
 
   def main(args: Array[String]) {
-    val modelUniverse = new Universe
-    val parameters = ModelParameters()
-    val week = new Week(parameters,modelUniverse)
-    week.sumQuality().addCondition(_ > 2.0)
-    week.shifts(1)(1).observeWorkerAssign(Seq(0, 1, 2))
-    val alg = Importance(10000, week.shifts(1)(1).qualifications.elements: _*)
+    Universe.createNew()
+    val workers = Seq.tabulate(numWorkers)(i=> new Worker(i))
+    for(i<- 0 until trainSize) {
+      val shift = new Shift(workers,0,0)
+      shift.sumQuality.observe(100)
+      //shift.sumQuality.observe(0.6)
+    }
+    val futureShift = new Shift(workers,0,0)
+    println(Universe.universe.activeElements.toString())
+    val alg = Importance(1000,futureShift.qualifications.elements: _*)
+    println("Starting sampling")
     alg.start()
-    val test = alg.probability(week.shifts(1)(1).qualifications(1), (x: Double) => x > 0.1)
+    val test = alg.probability(futureShift.qualifications(0),(i:Int) => i < 10)
     println(test)
+    println(VariableElimination.probability(futureShift.qualifications(0),75))
 
   }
 }
