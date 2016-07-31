@@ -1,6 +1,5 @@
 import java.time.LocalDate
 
-import com.cra.figaro.algorithm.factored.VariableElimination
 import com.cra.figaro.algorithm.sampling.Importance
 import com.cra.figaro.language._
 import com.cra.figaro.library.atomic.continuous.Beta
@@ -29,16 +28,15 @@ object Model {
   val numTasks: Int = 3
   val numWorkers: Int = 4
 
-  val defaultQuality: Element[Double] = Beta(1, 1)
+  val defaultQuality: Element[Int] = Uniform(0 to 10: _*)
   val defaultTime: Element[Boolean] = Flip(0.5)
 
   val maxShifts: Int = 2
   val trainSize: Int = 5
 
 
-
   class Worker(id: Int) {
-    val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform(0,100))
+    val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform(0 to 10: _*))
     // i d like defaultQuality.clone here
     val timetable = for (i <- 0 until numDays) yield for (j <- 0 until numShifts) yield Random.nextBoolean()
 
@@ -51,30 +49,30 @@ object Model {
     * Shift(workers) represents an assignment of possible workers to tasks
     * Attention: number of possible workers > number of tasks
     */
-  class Shift(workers: Seq[Worker], day: Int, shift: Int){
+  class Shift(workers: Seq[Worker], day: Int, shift: Int) {
     var j = 0;
     lazy val index = generateUniqueIndex(numTasks)
     //val qualifications = new FixedSizeArray[Int](numTasks, i => Chain(index, (ls:List[Int]) => workers(ls(i)).taskQuality(i)))
     val qualifications = new FixedSizeArray[Int](numTasks, i => workers(i).taskQuality(i))
-    val sumQuality = qualifications.foldLeft(0)(_+_)
+    val sumQuality = qualifications.foldLeft(0)(_ + _)
 
-    def generateUniqueIndex(num: Int):Element[List[Int]]={
+    def generateUniqueIndex(num: Int): Element[List[Int]] = {
       val values = 0 until numWorkers
-      def uniqueCondition(seq:Seq[Int]) = seq.distinct.size == seq.size
+      def uniqueCondition(seq: Seq[Int]) = seq.distinct.size == seq.size
       val index = new FixedSizeArray[Int](num, i => Uniform(values: _*))
-      val allIndices : Element[List[Int]] = Inject(index.elements: _*)
+      val allIndices: Element[List[Int]] = Inject(index.elements: _*)
       allIndices.setCondition(uniqueCondition)
       allIndices
     }
 
 
-    def chainQual(num:Int):Element[Int] = {
+    def chainQual(num: Int): Element[Int] = {
       val res = workers(num).taskQuality(j)
-      j+=1
+      j += 1
       res
     }
 
-    def getSumQuality():Element[Int] = qualifications.foldLeft(0)(_ + _)
+    def getSumQuality(): Element[Int] = qualifications.foldLeft(0)(_ + _)
 
   }
 
@@ -89,22 +87,33 @@ object Model {
     lazy val sumQuality = getSumQuality()
 
 
-    def getSumQuality(): Element[Int] = Container(shifts.flatten.map(_.sumQuality): _*).foldLeft(0)(_+_)
+    def getSumQuality(): Element[Int] = Container(shifts.flatten.map(_.sumQuality): _*).foldLeft(0)(_ + _)
+  }
+
+  def underline = println("#############################################################")
+
+  def title(s: String) = {
+    underline; println(s); underline;
   }
 
   def main(args: Array[String]) {
     Universe.createNew()
-    val workers = Seq.tabulate(numWorkers)(i=> new Worker(i))
-    for(i<- 0 until trainSize) {
-      val shift = new Shift(workers,0,0)
-      shift.sumQuality.observe(100)
+
+    val workers = Seq.tabulate(numWorkers)(i => new Worker(i))
+
+    for (i <- 0 until trainSize * 30) {
+      val shift = new Shift(workers, 0, 0)
+      shift.sumQuality.observe(20)
     }
-    val futureShift = new Shift(workers,0,0)
-    println(Universe.universe.activeElements.toString())
-    val alg = Importance(100,futureShift.qualifications.elements: _*)
-    println("Starting sampling")
+    //val elements: List[Element[_]]= Universe.universe.activeElements
+    //for (element <- elements) println(element.toNameString)
+    title("Registered variables are: ")
+    val futureShift = new Shift(workers, 0, 0)
+    val alg = Importance(1000, futureShift.qualifications.elements: _*)
+    title("Starting sampling")
     alg.start()
-    val test = alg.probability(futureShift.qualifications(0),(i:Int) => i < 10)
-    println(test)
+    val test1 = alg.distribution(futureShift.qualifications(0)).sortWith((lh, rh) => lh._1 > rh._1)
+    for ((probability, value) <- test1) println(value + ": " + probability)
+    underline
   }
 }
