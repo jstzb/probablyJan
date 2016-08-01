@@ -1,11 +1,12 @@
 import java.time.LocalDate
 
+import com.cra.figaro.algorithm.OneTimeMPE
+import com.cra.figaro.algorithm.factored.MPEVariableElimination
+import com.cra.figaro.algorithm.factored.beliefpropagation.MPEBeliefPropagation
 import com.cra.figaro.algorithm.sampling._
 import com.cra.figaro.language._
-import com.cra.figaro.library.atomic.continuous.Beta
 import com.cra.figaro.library.atomic.discrete.Uniform
 import com.cra.figaro.library.collection.{Container, FixedSizeArray}
-import com.cra.figaro.patterns.learning.{ModelParameters, ParameterCollection}
 
 import scala.util.Random
 
@@ -23,35 +24,46 @@ import scala.util.Random
   * Created by jan on 21.07.16.
   */
 object Model {
-  val random = new scala.util.Random()
-
-  val numDays: Int = 2
-  val numShifts: Int = 2
+  val numDays: Int = 1
+  val numShifts: Int = 1
   val numTasks: Int = 3
   val numWorkers: Int = 5
 
-  val defaultQuality: Element[Int] = Uniform((0 to 10): _*)
-  val defaultTime: Element[Boolean] = Flip(0.5)
+  lazy val defaultQuality: Element[Int] = Uniform((0 to 10): _*)
+  lazy val defaultTime: Element[Boolean] = Flip(0.5)
 
   val maxShifts: Int = 2
-  val trainSize: Int = 3
+  val trainSize: Int = 18
 
-  /* Worker 0 : 7,3,2
-     Worker 1 : 2,7,3
-     Worker 2 : 2,3,7
-     Worker 3 : 5,2,5
-     Worker 4 : 2,5,2
-   */
-  val data = Map(//(Assignment,Quality)
-    0 -> (Seq(0,1,2),21),
-    1 -> (Seq(1,0,2),12),
-    2 -> (Seq(1,2,0),7),
-    3 -> (Seq(2,1,0),9),
-    4 -> (Seq(0,1,2),21)
+  /**
+    * Data Generation
+    *
+    * workers maps a worker id to a sequence of qualities we want to observe
+    */
+  val workers = Map(
+    0 -> Seq(2, 3, 2),
+    1 -> Seq(5, 2, 3),
+    2 -> Seq(2, 3, 5),
+    3 -> Seq(3, 2, 7),
+    4 -> Seq(2, 5, 2)
   )
+  /**
+    * Permutations generates some possible permutations of worker ids
+    */
+  val permutations: Seq[Seq[Int]] = (0 until numTasks).permutations.toSeq ++ (1 until numTasks + 1).permutations.toSeq ++ (2 until numTasks + 2).permutations.toSeq
 
-  val assignmentToPredict = Seq(0,2,1)
+  /**
+    * Data calculates for each permutation its corresponding sum of worker task quality
+    */
+  val data = Seq.tabulate(permutations.length)(i => (permutations(i),
+    workers(permutations(i)(0))(0)
+      + workers(permutations(i)(1))(1)
+      + workers(permutations(i)(2))(2)))
 
+  /**
+    *
+    * @param id
+    */
 
   class Worker(id: Int) {
     val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform((0 to 10): _*))
@@ -63,34 +75,19 @@ object Model {
     }
   }
 
-  class Assignment(worker: Worker,shift: Shift){
-
-  }
-
-  class TimeTable(workerId: Int, weekId: Int){
-
-  }
-
   /**
     * Shift(workers) represents an assignment of possible workers to tasks
     * Attention: number of possible workers > number of tasks
     */
-  class Shift(id: Int,workers: Seq[Worker],assign:Seq[Int]) {
+  class Shift(id: Int, workers: Seq[Worker], assign: Seq[Int]) {
     var j = 0;
 
     lazy val index: Element[List[Int]] = generateUniqueIndex(numTasks)
 
     //val qualifications = new FixedSizeArray[Int](numTasks, i => Chain(index, (ls:List[Int]) => workers(ls(i)).taskQuality(i)))
-     val qualifications = new FixedSizeArray[Int](numTasks, i => workers(assign(i)).taskQuality(i))
+    val qualifications = new FixedSizeArray[Int](numTasks, i => workers(assign(i)).taskQuality(i))
 
     val sumQuality = qualifications.foldLeft(0)(_ + _)
-
-    def customScheme() : ProposalScheme = {
-      TypedScheme(
-        () => index,
-        (ls:List[Int]) => Some(ProposalScheme(qualifications.elements: _*))
-      )
-    }
 
     def generateUniqueIndex(num: Int): Element[List[Int]] = {
       val values = 0 until numWorkers
@@ -119,8 +116,8 @@ object Model {
     *
     */
 
-  class Week(id: Int,workers: Seq[Worker]) {
-    lazy val shifts = Seq.tabulate(numDays*numShifts)( i => new Shift(i,workers,data(i)._1))
+  class Week(id: Int, workers: Seq[Worker]) {
+    lazy val shifts = Seq.tabulate(numDays * numShifts)(i => new Shift(i, workers, data(i)._1))
     lazy val sumQuality = getSumQuality()
 
 
@@ -130,31 +127,66 @@ object Model {
   def underline = println("#############################################################")
 
   def title(s: String) = {
-    underline; println(s); underline;
+    underline;
+    println(s);
+    underline;
+  }
+
+  def recommend(alg: OneTimeMPE, workers: Seq[Worker]): Seq[Int] = {
+    title("Recommender started ...")
+    alg.start()
+    val tuple = Seq.tabulate(numWorkers)(i => (i, Seq.tabulate(numTasks)(j => alg.mostLikelyValue(workers(i).taskQuality(j)))))
+    for (j <- 0 until numWorkers) println("Calculated: " + tuple(j)._2 + ", Original: " + this.workers(j))
+    val max = Seq.tabulate(numTasks)(i => tuple.max(Ordering.by((x: (Int, Seq[Int])) => x._2(i)))._1)
+    println("Recommanding following worker combination for an optimal shift " + max)
+    max
+  }
+
+  def calculateShiftQuality(alg:OneTimeMPE, workers: Seq[Worker],assign:Seq[Int]) : Int = {
+    title("Calculation started ...")
+    val shift = new Shift(trainSize+1,workers,assign)
+    alg.start()
+    val result = alg.mostLikelyValue(shift.sumQuality)
+    println("Calculated following quality for given shift " + result)
+    result
   }
 
   def main(args: Array[String]) {
+
     Universe.createNew()
-
     val workers = Seq.tabulate(numWorkers)(i => new Worker(i))
-
+    title("Data input:")
+    for (i <- data) println(i)
+    println("Adding evidence to model: ")
     for (i <- 0 until trainSize) {
-      val shift = new Shift(i,workers, data(i)._1)
+      val shift = new Shift(i, workers, data(i)._1)
       shift.sumQuality.observe(data(i)._2)
     }
+    args.length match {
+      case 1 => args(0) match {
+        case "MH" => recommend(MetropolisHastingsAnnealer(100000, ProposalScheme.default, Schedule.default(1.0)), workers)
+        case "VE" => recommend(MPEVariableElimination(), workers)
+        case "BP" => recommend(MPEBeliefPropagation(10), workers)
+        case "help" =>
+        case _ =>
+          println("Input unknown")
+          println("Please run with following arguments:")
+          println("<MPE Algorithm> <size of evidence>")
+      }
+      case 2 => args match {
+        case Array("VE",x) =>
+        case Array("MH",x) =>
+          val input = for (i:Char <- x) yield i.asDigit
+          calculateShiftQuality(MetropolisHastingsAnnealer(100000, ProposalScheme.default, Schedule.default(1.0)), workers,input)
+
+      }
+    }
+
+    /*
     title("Registered variables are: ")
     val elements: List[Element[_]]= Universe.universe.activeElements
     for (element <- elements) println(element.toNameString)
-    val futureShift = new Shift(10,workers,assignmentToPredict)
-    //val alg = MetropolisHastings(10000, ProposalScheme.default,futureShift.qualifications.elements: _*)
-    val alg = Importance(100,futureShift.qualifications.elements: _*)
-    title("Starting sampling")
-    alg.start()
-    println("Prediction based on data for assignment: " + assignmentToPredict)
-    for (i <- 0 until numTasks){
-      val out = alg.computeExpectation(futureShift.qualifications(i), (i:Int)=> i.toDouble)
-      println("Worker " + assignmentToPredict(i) + " will do task " + i + " at quality " + out )
-    }
+     */
     underline
   }
 }
