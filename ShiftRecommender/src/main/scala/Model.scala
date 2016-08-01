@@ -1,6 +1,6 @@
 import java.time.LocalDate
 
-import com.cra.figaro.algorithm.sampling.Importance
+import com.cra.figaro.algorithm.sampling._
 import com.cra.figaro.language._
 import com.cra.figaro.library.atomic.continuous.Beta
 import com.cra.figaro.library.atomic.discrete.Uniform
@@ -23,20 +23,38 @@ import scala.util.Random
   * Created by jan on 21.07.16.
   */
 object Model {
+  val random = new scala.util.Random()
+
   val numDays: Int = 2
   val numShifts: Int = 2
   val numTasks: Int = 3
-  val numWorkers: Int = 4
+  val numWorkers: Int = 5
 
-  val defaultQuality: Element[Int] = Uniform(0 to 10: _*)
+  val defaultQuality: Element[Int] = Uniform((0 to 10): _*)
   val defaultTime: Element[Boolean] = Flip(0.5)
 
   val maxShifts: Int = 2
-  val trainSize: Int = 5
+  val trainSize: Int = 3
+
+  /* Worker 0 : 7,3,2
+     Worker 1 : 2,7,3
+     Worker 2 : 2,3,7
+     Worker 3 : 5,2,5
+     Worker 4 : 2,5,2
+   */
+  val data = Map(//(Assignment,Quality)
+    0 -> (Seq(0,1,2),21),
+    1 -> (Seq(1,0,2),12),
+    2 -> (Seq(1,2,0),7),
+    3 -> (Seq(2,1,0),9),
+    4 -> (Seq(0,1,2),21)
+  )
+
+  val assignmentToPredict = Seq(0,2,1)
 
 
   class Worker(id: Int) {
-    val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform(0 to 10: _*))
+    val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform((0 to 10): _*))
     // i d like defaultQuality.clone here
     val timetable = for (i <- 0 until numDays) yield for (j <- 0 until numShifts) yield Random.nextBoolean()
 
@@ -45,21 +63,40 @@ object Model {
     }
   }
 
+  class Assignment(worker: Worker,shift: Shift){
+
+  }
+
+  class TimeTable(workerId: Int, weekId: Int){
+
+  }
+
   /**
     * Shift(workers) represents an assignment of possible workers to tasks
     * Attention: number of possible workers > number of tasks
     */
-  class Shift(workers: Seq[Worker], day: Int, shift: Int) {
+  class Shift(id: Int,workers: Seq[Worker],assign:Seq[Int]) {
     var j = 0;
-    lazy val index = generateUniqueIndex(numTasks)
+
+    lazy val index: Element[List[Int]] = generateUniqueIndex(numTasks)
+
     //val qualifications = new FixedSizeArray[Int](numTasks, i => Chain(index, (ls:List[Int]) => workers(ls(i)).taskQuality(i)))
-    val qualifications = new FixedSizeArray[Int](numTasks, i => workers(i).taskQuality(i))
+     val qualifications = new FixedSizeArray[Int](numTasks, i => workers(assign(i)).taskQuality(i))
+
     val sumQuality = qualifications.foldLeft(0)(_ + _)
+
+    def customScheme() : ProposalScheme = {
+      TypedScheme(
+        () => index,
+        (ls:List[Int]) => Some(ProposalScheme(qualifications.elements: _*))
+      )
+    }
 
     def generateUniqueIndex(num: Int): Element[List[Int]] = {
       val values = 0 until numWorkers
       def uniqueCondition(seq: Seq[Int]) = seq.distinct.size == seq.size
       val index = new FixedSizeArray[Int](num, i => Uniform(values: _*))
+
       val allIndices: Element[List[Int]] = Inject(index.elements: _*)
       allIndices.setCondition(uniqueCondition)
       allIndices
@@ -82,12 +119,12 @@ object Model {
     *
     */
 
-  class Week(workers: Seq[Worker]) {
-    lazy val shifts = Seq.tabulate(numDays, numShifts)((day, shift) => new Shift(workers, day, shift))
+  class Week(id: Int,workers: Seq[Worker]) {
+    lazy val shifts = Seq.tabulate(numDays*numShifts)( i => new Shift(i,workers,data(i)._1))
     lazy val sumQuality = getSumQuality()
 
 
-    def getSumQuality(): Element[Int] = Container(shifts.flatten.map(_.sumQuality): _*).foldLeft(0)(_ + _)
+    def getSumQuality(): Element[Int] = Container(shifts.map(_.sumQuality): _*).foldLeft(0)(_ + _)
   }
 
   def underline = println("#############################################################")
@@ -101,19 +138,23 @@ object Model {
 
     val workers = Seq.tabulate(numWorkers)(i => new Worker(i))
 
-    for (i <- 0 until trainSize * 30) {
-      val shift = new Shift(workers, 0, 0)
-      shift.sumQuality.observe(20)
+    for (i <- 0 until trainSize) {
+      val shift = new Shift(i,workers, data(i)._1)
+      shift.sumQuality.observe(data(i)._2)
     }
-    //val elements: List[Element[_]]= Universe.universe.activeElements
-    //for (element <- elements) println(element.toNameString)
     title("Registered variables are: ")
-    val futureShift = new Shift(workers, 0, 0)
-    val alg = Importance(1000, futureShift.qualifications.elements: _*)
+    val elements: List[Element[_]]= Universe.universe.activeElements
+    for (element <- elements) println(element.toNameString)
+    val futureShift = new Shift(10,workers,assignmentToPredict)
+    //val alg = MetropolisHastings(10000, ProposalScheme.default,futureShift.qualifications.elements: _*)
+    val alg = Importance(100,futureShift.qualifications.elements: _*)
     title("Starting sampling")
     alg.start()
-    val test1 = alg.distribution(futureShift.qualifications(0)).sortWith((lh, rh) => lh._1 > rh._1)
-    for ((probability, value) <- test1) println(value + ": " + probability)
+    println("Prediction based on data for assignment: " + assignmentToPredict)
+    for (i <- 0 until numTasks){
+      val out = alg.computeExpectation(futureShift.qualifications(i), (i:Int)=> i.toDouble)
+      println("Worker " + assignmentToPredict(i) + " will do task " + i + " at quality " + out )
+    }
     underline
   }
 }
