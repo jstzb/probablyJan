@@ -1,5 +1,3 @@
-import java.time.LocalDate
-
 import com.cra.figaro.algorithm.OneTimeMPE
 import com.cra.figaro.algorithm.factored.MPEVariableElimination
 import com.cra.figaro.algorithm.factored.beliefpropagation.MPEBeliefPropagation
@@ -17,9 +15,6 @@ import scala.util.Random
   *
   * constraints implemented:
   * one worker may only work once a shift
-  * one worker may only work if he wants to work
-  *
-  *
   *
   * Created by jan on 21.07.16.
   */
@@ -29,7 +24,7 @@ object Model {
   val numTasks: Int = 3
   val numWorkers: Int = 5
 
-  lazy val defaultQuality: Element[Int] = Uniform((0 to 10): _*)
+  lazy val defaultQuality: Element[Int] = Uniform(0 to 10: _*)
   lazy val defaultTime: Element[Boolean] = Flip(0.5)
 
   val maxShifts: Int = 2
@@ -50,23 +45,26 @@ object Model {
   /**
     * Permutations generates some possible permutations of worker ids
     */
-  val permutations: Seq[Seq[Int]] = (0 until numTasks).permutations.toSeq ++ (1 until numTasks + 1).permutations.toSeq ++ (2 until numTasks + 2).permutations.toSeq
+  val permutations: Seq[Seq[Int]] = (0 until numTasks).permutations.toSeq ++
+    (1 until numTasks + 1).permutations.toSeq ++
+    (2 until numTasks + 2).permutations.toSeq
 
   /**
     * Data calculates for each permutation its corresponding sum of worker task quality
     */
   val data = Seq.tabulate(permutations.length)(i => (permutations(i),
-    workers(permutations(i)(0))(0)
-      + workers(permutations(i)(1))(1)
-      + workers(permutations(i)(2))(2)))
+    workers(permutations(i)(0))(0) +
+      workers(permutations(i)(1))(1) +
+      workers(permutations(i)(2))(2)))
 
   /**
+    * Model of a Worker
     *
-    * @param id
+    * @param id of a worker
     */
 
   class Worker(id: Int) {
-    val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform((0 to 10): _*))
+    val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform(0 to 10: _*))
     // i d like defaultQuality.clone here
     val timetable = for (i <- 0 until numDays) yield for (j <- 0 until numShifts) yield Random.nextBoolean()
 
@@ -80,7 +78,7 @@ object Model {
     * Attention: number of possible workers > number of tasks
     */
   class Shift(id: Int, workers: Seq[Worker], assign: Seq[Int]) {
-    var j = 0;
+    var j = 0
 
     lazy val index: Element[List[Int]] = generateUniqueIndex(numTasks)
 
@@ -105,9 +103,6 @@ object Model {
       j += 1
       res
     }
-
-    def getSumQuality(): Element[Int] = qualifications.foldLeft(0)(_ + _)
-
   }
 
   /**
@@ -118,18 +113,15 @@ object Model {
 
   class Week(id: Int, workers: Seq[Worker]) {
     lazy val shifts = Seq.tabulate(numDays * numShifts)(i => new Shift(i, workers, data(i)._1))
-    lazy val sumQuality = getSumQuality()
-
-
-    def getSumQuality(): Element[Int] = Container(shifts.map(_.sumQuality): _*).foldLeft(0)(_ + _)
+    lazy val sumQuality = Container(shifts.map(_.sumQuality): _*).foldLeft(0)(_ + _)
   }
 
-  def underline = println("#############################################################")
+  def underline() = println("#############################################################")
 
   def title(s: String) = {
-    underline;
-    println(s);
-    underline;
+    underline()
+    println(s)
+    underline()
   }
 
   def recommend(alg: OneTimeMPE, workers: Seq[Worker]): Seq[Int] = {
@@ -142,9 +134,9 @@ object Model {
     max
   }
 
-  def calculateShiftQuality(alg:OneTimeMPE, workers: Seq[Worker],assign:Seq[Int]) : Int = {
+  def calculateShiftQuality(alg: OneTimeMPE, workers: Seq[Worker], assign: Seq[Int]): Int = {
     title("Calculation started ...")
-    val shift = new Shift(trainSize+1,workers,assign)
+    val shift = new Shift(trainSize + 1, workers, assign)
     alg.start()
     val result = alg.mostLikelyValue(shift.sumQuality)
     println("Calculated following quality for given shift " + result)
@@ -174,10 +166,10 @@ object Model {
           println("<MPE Algorithm> <size of evidence>")
       }
       case 2 => args match {
-        case Array("VE",x) =>
-        case Array("MH",x) =>
-          val input = for (i:Char <- x) yield i.asDigit
-          calculateShiftQuality(MetropolisHastingsAnnealer(100000, ProposalScheme.default, Schedule.default(1.0)), workers,input)
+        case Array("VE", x) =>
+        case Array("MH", x) =>
+          val input = for (i: Char <- x) yield i.asDigit
+          calculateShiftQuality(MetropolisHastingsAnnealer(100000, ProposalScheme.default, Schedule.default(1.0)), workers, input)
 
       }
     }
@@ -187,6 +179,6 @@ object Model {
     val elements: List[Element[_]]= Universe.universe.activeElements
     for (element <- elements) println(element.toNameString)
      */
-    underline
+    underline()
   }
 }
