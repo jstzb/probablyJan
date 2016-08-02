@@ -5,6 +5,7 @@ import com.cra.figaro.algorithm.sampling._
 import com.cra.figaro.language._
 import com.cra.figaro.library.atomic.discrete.{Poisson, Uniform}
 import com.cra.figaro.library.collection.{Container, FixedSizeArray}
+import com.quantifind.charts.Highcharts._
 
 import scala.util.Random
 
@@ -123,19 +124,12 @@ object Model {
     lazy val sumQuality = Container(shifts.map(_.sumQuality): _*).foldLeft(0)(_ + _)
   }
 
-  def underline() = println("#############################################################")
-
-  def title(s: String) = {
-    underline()
-    println(s)
-    underline()
-  }
 
   def recommend(alg: OneTimeMPE, workers: Seq[Worker]): Seq[Int] = {
     title("Recommender started ...")
     alg.start()
     val tuple = Seq.tabulate(numWorkers)(i => (i, Seq.tabulate(numTasks)(j => alg.mostLikelyValue(workers(i).taskQuality(j)))))
-    for (j <- 0 until numWorkers) println( names(j)+" calculated quality: " + tuple(j)._2 + ", original: " + this.workers(j))
+    for (j <- 0 until numWorkers) println(names(j) + " calculated quality: " + tuple(j)._2 + ", original: " + this.workers(j))
     val max = Seq.tabulate(numTasks)(i => tuple.max(Ordering.by((x: (Int, Seq[Int])) => x._2(i)))._1)
     underline()
     println("Recommending following worker combination for an optimal shift: ")
@@ -144,7 +138,7 @@ object Model {
   }
 
   def calculateShiftQuality(alg: OneTimeMPE, workers: Seq[Worker], assign: Seq[Int]): Int = {
-    title("Calculation started ...")
+    title("Calculation started for " + assign.map(names(_)))
     val shift = new Shift(trainSize + 1, workers, assign)
     alg.start()
     val result = alg.mostLikelyValue(shift.sumQuality)
@@ -152,18 +146,82 @@ object Model {
     result
   }
 
+  def rMSError(sampleSize: Int, workers: Seq[Worker]) = {
+    title("Starting calculating most probable explanation with BP")
+    var total0 = 0.0;
+    val workerError0 = List.fill(numWorkers, numTasks)(0.0)
+    for (i <- 0 until sampleSize) {
+      val alg = MetropolisHastingsAnnealer(100000, ProposalScheme.default, Schedule.default(1.0))
+      alg.start()
+      val tuple = Seq.tabulate(numWorkers)(i => (i, Seq.tabulate(numTasks)(j => alg.mostLikelyValue(workers(i).taskQuality(j)))))
+      for (i <- 0 until numWorkers) {
+        for (j <- 0 until numTasks) {
+          val diff = tuple(i)._2(j) - this.workers(i)(j)
+          val square = Math.pow(diff, 2)
+          total0 += square
+          workerError0(i).updated(j, square)
+        }
+      }
+    }
+    total0 = Math.sqrt(total0 / sampleSize)
+    println("Root Mean Square error of all workers is " + total0.toString)
+    println("RMS Error per Worker is " + (total0 / numWorkers))
+    underline()
+
+    title("Starting calculating most probable estimation with MH")
+    var total1 = 0.0;
+    val workerError1 = List.fill(numWorkers, numTasks)(0.0)
+    for (i <- 0 until sampleSize) {
+      val alg = MetropolisHastingsAnnealer(100000, ProposalScheme.default, Schedule.default(1.0))
+      alg.start()
+      val tuple = Seq.tabulate(numWorkers)(i => (i, Seq.tabulate(numTasks)(j => alg.mostLikelyValue(workers(i).taskQuality(j)))))
+      for (i <- 0 until numWorkers) {
+        for (j <- 0 until numTasks) {
+          val diff = tuple(i)._2(j) - this.workers(i)(j)
+          val square = Math.pow(diff, 2)
+          workerError1(i).updated(j, square)
+          total1 += square
+        }
+      }
+    }
+    val perWorker0 = List.tabulate(numWorkers)((i: Int) => workerError0(i).foldLeft(0.0)(_ + _))
+    val perWorker1 = List.tabulate(numWorkers)((i: Int) => workerError1(i).foldLeft(0.0)(_ + _))
+
+    total1 = Math.sqrt(total1 / sampleSize)
+    println("Root Mean Square error of all workers is " + total1.toString)
+    println("Average RMS Error per Worker is " + (total1 / numWorkers))
+    underline()
+    generatePlot((0 until 4).toList, List(total0, total1, total0 / numWorkers, total1 / numWorkers), "Average per Worker / Total Error", "Error", "Error calculation")
+  }
+
+  def generatePlot(x: List[Int], y: List[Double], xl: String, yl: String, title: String) {
+    bar(x, y)
+    com.quantifind.charts.Highcharts.title(title)
+    xAxis(xl)
+    yAxis(yl)
+  }
+
+  def underline() = println("#############################################################")
+
+  def title(s: String) = {
+    underline()
+    println(s)
+    underline()
+  }
+
+
   def main(args: Array[String]) {
 
     Universe.createNew()
     val workers = Seq.tabulate(numWorkers)(i => new Worker(i))
-    title("Data input:")
+    title("Generating evidence to add to Model:")
     for (i <- 0 until trainSize) println("Combo " + data(i)._1.map(names(_)) + " has total shift quality " + data(i)._2)
-    println("Adding evidence to model: ")
     for (i <- 0 until trainSize) {
       val shift = new Shift(i, workers, data(i)._1)
       shift.sumQuality.observe(data(i)._2)
     }
     args.length match {
+      case 0 => rMSError(20, workers)
       case 1 => args(0) match {
         case "MH" => recommend(MetropolisHastingsAnnealer(100000, ProposalScheme.default, Schedule.default(1.0)), workers)
         case "VE" => recommend(MPEVariableElimination(), workers)
@@ -176,10 +234,15 @@ object Model {
       }
       case 2 => args match {
         case Array("VE", x) =>
+          val input = for (i: Char <- x) yield i.asDigit
+          calculateShiftQuality(MPEVariableElimination(), workers, input)
         case Array("MH", x) =>
           val input = for (i: Char <- x) yield i.asDigit
-          calculateShiftQuality(MetropolisHastingsAnnealer(100000, ProposalScheme.default, Schedule.default(1.0)), workers, input)
-
+          calculateShiftQuality(MetropolisHastingsAnnealer(100000, ProposalScheme.default, Schedule.default(0.5)), workers, input)
+        case Array("BP", x) =>
+          val input = for (i: Char <- x) yield i.asDigit
+          calculateShiftQuality(MPEBeliefPropagation(trainSize), workers, input)
+        case _ => println("Input unknown")
       }
     }
 
