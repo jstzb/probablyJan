@@ -3,7 +3,7 @@ import com.cra.figaro.algorithm.factored.MPEVariableElimination
 import com.cra.figaro.algorithm.factored.beliefpropagation.MPEBeliefPropagation
 import com.cra.figaro.algorithm.sampling._
 import com.cra.figaro.language._
-import com.cra.figaro.library.atomic.discrete.Uniform
+import com.cra.figaro.library.atomic.discrete.{Poisson, Uniform}
 import com.cra.figaro.library.collection.{Container, FixedSizeArray}
 
 import scala.util.Random
@@ -13,9 +13,6 @@ import scala.util.Random
   *
   * Model of Shift Recommender
   *
-  * constraints implemented:
-  * one worker may only work once a shift
-  *
   * Created by jan on 21.07.16.
   */
 object Model {
@@ -24,7 +21,7 @@ object Model {
   val numTasks: Int = 3
   val numWorkers: Int = 5
 
-  lazy val defaultQuality: Element[Int] = Uniform(0 to 10: _*)
+  lazy val defaultQuality: Element[Int] = Poisson(5)
   lazy val defaultTime: Element[Boolean] = Flip(0.5)
 
   val maxShifts: Int = 2
@@ -56,6 +53,16 @@ object Model {
     workers(permutations(i)(0))(0) +
       workers(permutations(i)(1))(1) +
       workers(permutations(i)(2))(2)))
+  /**
+    * names maps each workerId to a name
+    */
+  val names = Map(
+    0 -> "Anny",
+    1 -> "Bob",
+    2 -> "Cindy",
+    3 -> "Dex",
+    4 -> "Eddy"
+  )
 
   /**
     * Model of a Worker
@@ -64,8 +71,8 @@ object Model {
     */
 
   class Worker(id: Int) {
-    val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform(0 to 10: _*))
-    // i d like defaultQuality.clone here
+    val taskQuality = new FixedSizeArray[Int](numTasks, i => Poisson(5))
+    //val taskQuality = new FixedSizeArray[Int](numTasks, i => Uniform(0 to 10: _*))
     val timetable = for (i <- 0 until numDays) yield for (j <- 0 until numShifts) yield Random.nextBoolean()
 
     def hasTime(day: Int, shift: Int): Boolean = {
@@ -128,9 +135,11 @@ object Model {
     title("Recommender started ...")
     alg.start()
     val tuple = Seq.tabulate(numWorkers)(i => (i, Seq.tabulate(numTasks)(j => alg.mostLikelyValue(workers(i).taskQuality(j)))))
-    for (j <- 0 until numWorkers) println("Calculated: " + tuple(j)._2 + ", Original: " + this.workers(j))
+    for (j <- 0 until numWorkers) println( names(j)+" calculated quality: " + tuple(j)._2 + ", original: " + this.workers(j))
     val max = Seq.tabulate(numTasks)(i => tuple.max(Ordering.by((x: (Int, Seq[Int])) => x._2(i)))._1)
-    println("Recommanding following worker combination for an optimal shift " + max)
+    underline()
+    println("Recommending following worker combination for an optimal shift: ")
+    println(max.map(names(_)))
     max
   }
 
@@ -148,7 +157,7 @@ object Model {
     Universe.createNew()
     val workers = Seq.tabulate(numWorkers)(i => new Worker(i))
     title("Data input:")
-    for (i <- data) println(i)
+    for (i <- 0 until trainSize) println("Combo " + data(i)._1.map(names(_)) + " has total shift quality " + data(i)._2)
     println("Adding evidence to model: ")
     for (i <- 0 until trainSize) {
       val shift = new Shift(i, workers, data(i)._1)
