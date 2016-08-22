@@ -2,10 +2,12 @@ name := "ShiftRecommender"
 
 version := "1.0"
 
-scalaVersion := "2.11.4"
+scalaVersion := "2.11.8"
 
 unmanagedBase := file(sys.env("HOME")) / "etc" / "figaro"
 
-val chart = "com.quantifind" %% "wisp" % "0.0.4"
+libraryDependencies += "com.quantifind" %% "wisp" % "0.0.4"
+libraryDependencies += "org.scalanlp" %% "breeze" % "0.12"
+libraryDependencies += "org.scalanlp" %% "breeze-viz" % "0.12"
 
-libraryDependencies += chart
+resolvers += "Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/"
