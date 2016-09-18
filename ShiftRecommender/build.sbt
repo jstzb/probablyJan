@@ -2,12 +2,9 @@ name := "ShiftRecommender"
 
 version := "1.0"
 
-scalaVersion := "2.11.8"
+scalaVersion := "2.11.6"
 
-unmanagedBase := file(sys.env("HOME")) / "etc" / "figaro"
-
-libraryDependencies += "com.quantifind" %% "wisp" % "0.0.4"
-libraryDependencies += "org.scalanlp" %% "breeze" % "0.12"
-libraryDependencies += "org.scalanlp" %% "breeze-viz" % "0.12"
-
-resolvers += "Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/"
+libraryDependencies += "org.scalanlp" % "breeze_2.11" % "0.10"
+libraryDependencies += "com.cra.figaro" % "figaro_2.11" % "3.3.0.0"
+libraryDependencies += "org.scala-lang.modules" % "scala-xml_2.11" % "1.0.3"
+libraryDependencies += "org.scala-lang.modules" % "scala-parser-combinators_2.11" % "1.0.3"
