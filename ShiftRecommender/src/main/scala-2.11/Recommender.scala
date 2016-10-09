@@ -19,10 +19,11 @@ class Recommender (week: Week) {
       .map(z=>(z._1,z._2,z._3,z._4,Binary(),tq(names(z._1))(z._4),shiftleader(names(z._1))))
      // {if(timeMap((names(w),d,s))>0) {x = x :: (w,d,s,t,Integer(),tq(names(w))(t))}}
      // x.groupBy(x => (x._1,x._2+x._3)).filter(_._2.length==numShifts*numTasks).map(x => (x._1,x._2.map(y => (days(y._2),shifts(y._3),tasks(y._4),names(y._1))))).foreach(_._2.foreach(println))
+    val x1 = x.partition(y => maxShift(names(y._1))==5)
   val lpp = ((x.map(x=>x._5*x._6).reduce[Expression](_+_))
     subjectTo(x.map(_._5).map(_ >= 0):_*)
     //subjectTo(x.groupBy(x=>(x._2,x._3)).values.map(y =>y.filter(_._7>0).map(z => z._5).reduce[Expression](_+_)>= 1).toSeq:_*)
-    subjectTo(x.groupBy(_._1).values.map(y => y.map(_._5).reduce[Expression](_+_)<=maxShift(names(y.head._1))).toSeq:_*)
+    subjectTo(x1._2.groupBy(_._1).values.map(y => y.map(_._5).reduce[Expression](_+_)<=maxShift(names(y.head._1))).toSeq:_*)
     subjectTo(x.groupBy(x=>(x._2,x._3)).values.map(y=> y.map(_._5).reduce[Expression](_+_)<=taskMap(y.head._2,y.head._3)).toSeq:_*)
     subjectTo(x.groupBy(x=>(x._2,x._3,x._4)).values.map(_.map(_._5).reduce[Expression](_+_)<=1).toSeq:_*)
     subjectTo(x.groupBy(x=>(x._1,x._2)).values.map(_.map(_._5).reduce[Expression](_+_)<=1).toSeq:_*)
