@@ -1,3 +1,4 @@
+/*
 import com.cra.figaro.algorithm.OneTimeMPE
 import com.cra.figaro.algorithm.factored.MPEVariableElimination
 import com.cra.figaro.algorithm.factored.beliefpropagation.MPEBeliefPropagation
@@ -16,7 +17,7 @@ import scala.util.Random
   *
   * Created by jan on 21.07.16.
   */
-object Model {
+object DeprecatedModel {
   val numDays: Int = 1
   val numShifts: Int = 1
   val numTasks: Int = 3
@@ -253,4 +254,4 @@ object Model {
      */
     underline()
   }
-}
+}*/
