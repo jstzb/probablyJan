@@ -8,6 +8,16 @@ import scala.collection.immutable.{IndexedSeq, TreeMap}
   */
 class Recommender (week: Week) {
 
+  def partialSumConstraints[A, B](lp: LinearProgram)(list: IndexedSeq[(lp.Variable, List[A])])(f: List[A] => B)(g: (lp.Expression, B) => lp.Constraint): Iterable[lp.Constraint] = {
+    val grouped: Map[B, IndexedSeq[(lp.Variable, List[A])]] = list.groupBy(x => f(x._2))
+    var resultingConstraints = List.empty[lp.Constraint]
+    for (elem <- grouped) {
+      val expression = elem._2.map(y => y._1).reduce[lp.Expression](_ + _)
+      resultingConstraints = g(expression, elem._1) :: resultingConstraints
+    }
+    resultingConstraints
+  }
+
   def recommendWeek()={
   import week._
   val maxShifts = (for(i <- 0 until numWorkers) yield maxShift(names(i))).sum

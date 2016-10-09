@@ -1,0 +1,15 @@
+Tag;Schicht;Buerger;Herd;Fritte;Saladette;Spuele
+Mo;Frueh;Ahmed;Zora;Lena;Ulf;Gunther;Sonja;Ying
+Mo;Spaet;Fridolin;Alex;Harald;Olaf
+Di;Frueh;Ahmed;Fridolin;Lena;Ulf;Isolde;Xora;Nora
+Di;Spaet;Alex;Balthasar;Harald;Zora;Vladimir;Jakob
+Mi;Frueh;Rudolf;Nora;Emil;Vladimir;Berta;Ying
+Mi;Spaet;Balthasar;Olaf;Wladimir;Klaus
+Do;Frueh;Tom;Emil;Doris;Wladimir;Xora;Maike
+Do;Spaet;Rudolf;Jakob
+Fr;Frueh;Berta;Isolde;Peter;Maike
+Fr;Spaet;Quentin;Christian
+Sa;Frueh;Tom;Quentin;Doris;Gunther;Sonja
+Sa;Spaet;Klaus
+So;Frueh;Peter
+So;Spaet;Christian

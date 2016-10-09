@@ -17,10 +17,10 @@ object Model {
     val week = new Week()
     val dir: String = System.getProperty("user.home")
     val sep: String = System.getProperty("line.separator")
-    week.readTimetableFromFile(dir+"/time.csv",2)
-    week.readQualificationsFromFile(dir+"/qual.csv")
+    week.readTimetableFromFile(dir+"/timetable.csv",2)
+    week.readQualificationsFromFile(dir+"/qualification.csv")
     val recommender = new Recommender(week)
-    recommender.writeFile(dir+"/recom.csv")
+    recommender.writeFile(dir+"/recommendation.csv")
 
   }
 
